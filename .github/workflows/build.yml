@@ -1,0 +1,69 @@
+name: Crear IPK webOS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar proyecto
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar herramientas webOS
+        run: npm install -g @webos-tools/cli
+
+      - name: Buscar proyecto
+        run: |
+          APPINFO=$(find . -name appinfo.json -not -path './node_modules/*' | head -n 1)
+
+          if [ -z "$APPINFO" ]; then
+            ZIP=$(find . -name '*.zip' | head -n 1)
+
+            if [ -n "$ZIP" ]; then
+              mkdir -p proyecto
+              unzip -oq "$ZIP" -d proyecto
+              APPINFO=$(find proyecto -name appinfo.json | head -n 1)
+            fi
+          fi
+
+          if [ -z "$APPINFO" ]; then
+            if [ -f index.html ]; then
+              cat > appinfo.json <<'EOF'
+          {
+            "id": "com.example.hlsplayer",
+            "version": "1.0.2",
+            "vendor": "Personal",
+            "type": "web",
+            "main": "index.html",
+            "title": "HLS Player",
+            "icon": "icon.png",
+            "largeIcon": "largeIcon.png"
+          }
+          EOF
+              APPINFO="./appinfo.json"
+            else
+              echo "No se encontró el proyecto"
+              exit 1
+            fi
+          fi
+
+          echo "APP_DIR=$(dirname "$APPINFO")" >> "$GITHUB_ENV"
+
+      - name: Generar IPK
+        run: |
+          mkdir -p salida
+          ares-package --no-minify -o salida "$APP_DIR"
+
+      - name: Descargar IPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: reproductor-ipk
+          path: salida/*.ipk
